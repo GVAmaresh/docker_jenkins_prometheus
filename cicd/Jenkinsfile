@@ -1,0 +1,76 @@
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME = "djp"
+        DOCKER_HUB_REPO = "gvamaresh/djp"
+    }
+
+    stages {
+        stage('Checkout Code') {
+            steps {
+                git branch: 'main', url: 'https://github.com/GVAmaresh/My_private_Page/tree/main/djp'
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                sh 'npm install'
+            }
+        }
+
+        stage('Run Unit Tests') {
+            steps {
+                sh 'npm test' 
+            }
+        }
+
+        stage('Linting & Code Quality Check') {
+            steps {
+                sh 'npm run lint'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker build -t $IMAGE_NAME .'
+            }
+        }
+
+        stage('Run Integration Tests') {
+            steps {
+                sh 'docker run --rm $IMAGE_NAME npm test' // Runs tests inside container
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                withDockerRegistry([credentialsId: 'docker-hub-credentials', url: '']) {
+                    sh 'docker tag $IMAGE_NAME $DOCKER_HUB_REPO'
+                    sh 'docker push $DOCKER_HUB_REPO'
+                }
+            }
+        }
+
+        stage('Deploy with Docker Compose') {
+            steps {
+                sh 'docker-compose up -d --build'
+            }
+        }
+
+        stage('Post Deployment Health Check') {
+            steps {
+                sh 'curl -f http://localhost:5000/metrics || exit 1' // Check Prometheus endpoint
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Deployment successful!'
+        }
+        failure {
+            echo 'Deployment failed. Check logs.'
+        }
+    }
+}
